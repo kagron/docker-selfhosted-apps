@@ -7,7 +7,7 @@ if [ ! -f "${ENV_FILE}" ]; then
 fi
 # Export env variables
 set -o allexport
-source .env
+source $ENV_FILE
 set +o allexport
 
 # Name to give this backup within the borg repo
@@ -36,8 +36,8 @@ if [[ ! "$BORG_S3_BACKUP_AWS_PROFILE" ]]; then
   exit 1
 fi
 
-if [[ ! "$GOTIFY_URL" && ! "$GOTIFY_TOKEN" ]]; then
-  printf "\n\n** Please provide with GOTIFY_URL and GOTIFY_TOKEN on the environment\n"
+if [[ ! "$PUSHOVER_URL" && ! "$PUSHOVER_TOKEN" && ! "$PUSHOVER_USER_TOKEN" ]]; then
+  printf "\n\n** Please provide with PUSHOVER_URL and PUSHOVER_TOKEN and PUSHOVER_TOKEN on the environment\n"
   exit 1
 fi
 
@@ -88,7 +88,7 @@ if [ $OPERATION_STATUS == 0 ]; then
 fi
 
 if [ $OPERATION_STATUS == 0 ]; then
-	# Create Gotify stats
+	# Create Pushover stats
 	BORG_STATS=$(borg info ::${BACKUP_NAME})
 	AWS_STATS=$(aws s3 ls --profile=${BORG_S3_BACKUP_AWS_PROFILE} --summarize --recursive s3://${BORG_S3_BACKUP_BUCKET} | tail -1 | awk '{ printf "%.3f GB", $3/1024/1024/1024; }')
 	NL=$'\n'
@@ -97,21 +97,22 @@ if [ $OPERATION_STATUS == 0 ]; then
 	MESSAGE="${BORG_STATS}${NL}AWS bucket size : ${AWS_STATS}"
 else
 	STATUS_MESSAGE="Backup failed"
+	MESSAGE="Backup to S3 failed"
 fi
 
 # Stopping docker containers to ensure uncorrupted files
 printf "\n\n** Starting docker containers...\n"
 docker start $(docker ps -a -q)
 
-# Waiting 60s for gotify to start
-sleep 60
-
-# Send gotify notification and exit appropriately
-printf "\n** Sending notification to gotify...\n"
+# Send Pushover notification and exit appropriately
+# https://api.pushover.net/1/messages.json?token=${}
+printf "\n** Sending notification to pushover...\n"
 if [ $OPERATION_STATUS == 0 ]; then
-	curl -s "${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=5" > /dev/null
+	curl -s "${PUSHOVER_URL}" -F "token=${PUSHOVER_TOKEN}" -F "user=${PUSHOVER_USER_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=0" > /dev/null
+	# curl -s "${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=5" > /dev/null
 else
-	curl -s "${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=5" > /dev/null
+	curl -s "${PUSHOVER_URL}" -F "token=${PUSHOVER_TOKEN}" -F "user=${PUSHOVER_USER_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=0" > /dev/null
+	# curl -s "${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=5" > /dev/null
 fi
 
 # Same as above, but on stdout
