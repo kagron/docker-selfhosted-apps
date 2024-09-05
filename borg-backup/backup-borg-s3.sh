@@ -54,11 +54,29 @@ printf "\n** Stopping docker containers...\n"
 docker stop $(docker ps -a -q)
 
 # Local borg backup
-printf "\n** Backing up ${DOCKER_DIR} with borg...\n"
-borg create ::${BACKUP_NAME} ${DOCKER_DIR} --stats --exclude-from ${EXCLUDES_FILE} --compression zlib,6
+printf "\n** Backing up ${DOCKER_DIR} with borg to repo ${BORG_REPO}...\n"
+borg create ${BORG_REPO}::${BACKUP_NAME} ${DOCKER_DIR} --stats --exclude-from ${EXCLUDES_FILE} --compression zlib,6
 
 # Define and store the backup's exit status
 OPERATION_STATUS=$?
+if [ $OPERATION_STATUS != 0 ]; then
+	printf "\n** ERROR backing up to ${BORG_REPO}"
+	MESSAGE="Error backing up to ${BORG_REPO}"
+	OPERATION_STATUS=1
+fi
+
+# External Drive borg backup
+printf "\n** Backing up ${DOCKER_DIR} with borg to repo ${BORG_EXTDRIVE_REPO}...\n"
+export BORG_PASSPHRASE=$BORG_EXTDRIVE_PASSPHRASE
+borg create ${BORG_EXTDRIVE_REPO}::${BACKUP_NAME} ${DOCKER_DIR} --stats --exclude-from ${EXCLUDES_FILE} --compression zlib,6
+
+# Define and store the backup's exit status
+OPERATION_STATUS=$?
+if [ $OPERATION_STATUS != 0 ]; then
+	printf "\n** ERROR backing up to ${BORG_EXTDRIVE_REPO}"
+	MESSAGE="Error backing up to ${BORG_REPO}"
+	OPERATION_STATUS=1
+fi
 
 # Only continue if backup was actually successful
 if [ $OPERATION_STATUS == 0 ]; then
