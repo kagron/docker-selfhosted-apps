@@ -107,12 +107,13 @@ fi
 
 if [ $OPERATION_STATUS == 0 ]; then
 	# Create Pushover stats
-	BORG_STATS=$(borg info ${BORG_EXTDRIVE_REPO}::${BACKUP_NAME})
+	BORG_EXT_STATS=$(borg info ${BORG_EXTDRIVE_REPO}::${BACKUP_NAME})
 	# Reset variables
 	set -o allexport
 	source $ENV_FILE
 	set +o allexport 
-	BORG_STATS=$(${BORG_STATS}) + $(borg info ${BORG_REPO}::${BACKUP_NAME})
+	BORG_NAS_STATS=$(borg info ${BORG_REPO}::${BACKUP_NAME})
+	BORG_STATS=$BORG_NAS_STATS + $BORG_EXT_STATS
 	AWS_STATS=$(aws s3 ls --profile=${BORG_S3_BACKUP_AWS_PROFILE} --summarize --recursive s3://${BORG_S3_BACKUP_BUCKET} | tail -1 | awk '{ printf "%.3f GB", $3/1024/1024/1024; }')
 	NL=$'\n'
 	
