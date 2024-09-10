@@ -81,8 +81,14 @@ fi
 # Only continue if backup was actually successful
 if [ $OPERATION_STATUS == 0 ]; then
 	# Clean up old backups: keep last daily, last weekly and last monthly
-	printf "\n** Pruning old backups...\n"
-	borg prune -v --list --keep-daily=1 --keep-weekly=1 --keep-monthly=1
+	printf "\n** Pruning old backups from repo ${BORG_EXTDRIVE_REPO}...\n"
+	borg prune -v --list --keep-daily=1 --keep-weekly=1 --keep-monthly=1 ${BORG_EXTDRIVE_REPO}
+	# Reset variables to get first backup's passphrase
+	set -o allexport
+	source $ENV_FILE
+	set +o allexport 
+	printf "\n** Pruning old backups from repo ${BORG_REPO}...\n"
+	borg prune -v --list --keep-daily=1 --keep-weekly=1 --keep-monthly=1 ${BORG_REPO}
 
 	# Check and compare backup size with threshold
 	if [[ "$BACKUP_THRESHOLD" && $BACKUP_THRESHOLD != 0 ]]; then
@@ -107,18 +113,20 @@ fi
 
 if [ $OPERATION_STATUS == 0 ]; then
 	# Create Pushover stats
-	BORG_EXT_STATS=$(borg info ${BORG_EXTDRIVE_REPO}::${BACKUP_NAME})
-	# Reset variables
-	set -o allexport
-	source $ENV_FILE
-	set +o allexport 
 	BORG_NAS_STATS=$(borg info ${BORG_REPO}::${BACKUP_NAME})
-	BORG_STATS=$BORG_NAS_STATS + $BORG_EXT_STATS
+	
+	export BORG_PASSPHRASE=$BORG_EXTDRIVE_PASSPHRASE
+	BORG_EXT_STATS=$(borg info ${BORG_EXTDRIVE_REPO}::${BACKUP_NAME})
+	
+	BORG_STATS="${BORG_NAS_STATS}"
 	AWS_STATS=$(aws s3 ls --profile=${BORG_S3_BACKUP_AWS_PROFILE} --summarize --recursive s3://${BORG_S3_BACKUP_BUCKET} | tail -1 | awk '{ printf "%.3f GB", $3/1024/1024/1024; }')
 	NL=$'\n'
 	
 	STATUS_MESSAGE="Backup successful"
 	MESSAGE="${BORG_STATS}${NL}AWS bucket size : ${AWS_STATS}"
+	printf "\n** Borg NAS Stats: ${BORG_NAS_STATS}"
+	printf "\n** Borg Ext Drive Stats: ${BORG_EXT_STATS}"
+	printf "\n** AWS bucket size: ${AWS_STATS}"
 else
 	STATUS_MESSAGE="Backup failed"
 	MESSAGE="Backup to S3 failed"
@@ -129,14 +137,11 @@ printf "\n\n** Starting docker containers...\n"
 docker start $(docker ps -a -q)
 
 # Send Pushover notification and exit appropriately
-# https://api.pushover.net/1/messages.json?token=${}
 printf "\n** Sending notification to pushover...\n"
 if [ $OPERATION_STATUS == 0 ]; then
 	curl -s "${PUSHOVER_URL}" -F "token=${PUSHOVER_TOKEN}" -F "user=${PUSHOVER_USER_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=0" > /dev/null
-	# curl -s "${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=5" > /dev/null
 else
 	curl -s "${PUSHOVER_URL}" -F "token=${PUSHOVER_TOKEN}" -F "user=${PUSHOVER_USER_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=0" > /dev/null
-	# curl -s "${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=5" > /dev/null
 fi
 
 # Same as above, but on stdout
