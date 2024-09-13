@@ -21,51 +21,51 @@ DOCKER_BACKUP_NAME=${DOCKER_BACKUP_PREFIX}-${CURRENT_TIME}
 ROUTER_BACKUP_NAME=${ROUTER_BACKUP_PREFIX}-${CURRENT_TIME}
 PIHOLE_BACKUP_NAME=${PIHOLE_BACKUP_PREFIX}-${CURRENT_TIME}
 
-printf "** Starting backup ${DOCKER_BACKUP_NAME} ...\n"
+printf "** Starting backup ${DOCKER_BACKUP_NAME} ..."
 
 # Check environment vars are set
 if [[ ! "$DOCKER_DIR" ]]; then
-  printf "\n\n** Please provide with DOCKER_DIR on the environment\n"
+  printf "\n\n** Please provide with DOCKER_DIR on the environment"
   exit 1
 fi
 
 if [[ ! "$ROUTER_HOST" ]]; then
-  printf "\n\n** Please provide with ROUTER_HOST on the environment\n"
+  printf "\n\n** Please provide with ROUTER_HOST on the environment"
   exit 1
 fi
 
 if [[ ! "$PIHOLE_HOST" ]]; then
-  printf "\n\n** Please provide with PIHOLE_HOST on the environment\n"
+  printf "\n\n** Please provide with PIHOLE_HOST on the environment"
   exit 1
 fi
 
 if [[ ! "$SSH_PRIVATE_KEY_PATH" ]]; then
-  printf "\n\n** Please provide with SSH_PRIVATE_KEY_PATH on the environment\n"
+  printf "\n\n** Please provide with SSH_PRIVATE_KEY_PATH on the environment"
   exit 1
 fi
 
 if [[ ! "$BORG_REPO" ]]; then
-  printf "\n\n** Please provide with BORG_REPO on the environment\n"
+  printf "\n\n** Please provide with BORG_REPO on the environment"
   exit 1
 fi
 
 if [[ ! "$BORG_S3_BACKUP_BUCKET" ]]; then
-  printf "\n\n** Please provide with BORG_S3_BACKUP_BUCKET on the environment\n"
+  printf "\n\n** Please provide with BORG_S3_BACKUP_BUCKET on the environment"
   exit 1
 fi
 
 if [[ ! "$BORG_S3_BACKUP_AWS_PROFILE" ]]; then
-  printf "\n\n** Please provide with BORG_S3_BACKUP_AWS_PROFILE on the environment (awscli profile)\n"
+  printf "\n\n** Please provide with BORG_S3_BACKUP_AWS_PROFILE on the environment (awscli profile)"
   exit 1
 fi
 
 if [[ ! "$PUSHOVER_URL" && ! "$PUSHOVER_TOKEN" && ! "$PUSHOVER_USER_TOKEN" ]]; then
-  printf "\n\n** Please provide with PUSHOVER_URL and PUSHOVER_TOKEN and PUSHOVER_TOKEN on the environment\n"
+  printf "\n\n** Please provide with PUSHOVER_URL and PUSHOVER_TOKEN and PUSHOVER_TOKEN on the environment"
   exit 1
 fi
 
 # Backing up the .env file
-printf "\n** Copying .env file to ${DOCKER_DIR}...\n"
+printf "\n** Copying .env file to ${DOCKER_DIR}..."
 cp .env ${DOCKER_DIR}/.borgenv
 
 SYNC_COMMAND="aws s3 sync ${BORG_REPO} s3://${BORG_S3_BACKUP_BUCKET} --profile=${BORG_S3_BACKUP_AWS_PROFILE} --delete"
@@ -77,11 +77,11 @@ if [ ! -f "${EXCLUDES_FILE}" ]; then
 fi
 
 # Stopping docker containers to ensure uncorrupted files
-printf "\n** Stopping docker containers...\n"
+printf "\n** Stopping docker containers..."
 docker stop $(docker ps -a -q)
 
 # Docker borg backup
-printf "\n** Backing up ${DOCKER_DIR} with borg to repo ${BORG_REPO}...\n"
+printf "\n** Backing up ${DOCKER_DIR} with borg to repo ${BORG_REPO}..."
 borg create ${BORG_REPO}::${DOCKER_BACKUP_NAME} ${DOCKER_DIR} --stats --exclude-from ${EXCLUDES_FILE} --compression zlib,6
 
 # Define and store the backup's exit status
@@ -93,7 +93,7 @@ if [ $OPERATION_STATUS != 0 ]; then
 fi
 
 # Pi-Hole borg backup
-printf "\n** Backing up Pi-Hole with borg to repo ${BORG_REPO}...\n"
+printf "\n** Backing up Pi-Hole with borg to repo ${BORG_REPO}..."
 
 PIHOLE_BACKUP_DIR=pi-hole-backup
 
@@ -122,7 +122,7 @@ if [ $OPERATION_STATUS != 0 ]; then
 fi
 
 # OpenWrt.lan borg backup
-printf "\n** Backing up OpenWrt.lan with borg to repo ${BORG_REPO}...\n"
+printf "\n** Backing up OpenWrt.lan with borg to repo ${BORG_REPO}..."
 
 ROUTER_BACKUP_DIR=openwrt-backup
 ROUTER_TAR_NAME=openwrt.tar.gz
@@ -152,7 +152,7 @@ if [ $OPERATION_STATUS != 0 ]; then
 fi
 
 # External Drive borg backup
-printf "\n** Backing up ${DOCKER_DIR} with borg to repo ${BORG_EXTDRIVE_REPO}...\n"
+printf "\n** Backing up ${DOCKER_DIR} with borg to repo ${BORG_EXTDRIVE_REPO}..."
 export BORG_PASSPHRASE=$BORG_EXTDRIVE_PASSPHRASE
 borg create ${BORG_EXTDRIVE_REPO}::${DOCKER_BACKUP_NAME} ${DOCKER_DIR} --stats --exclude-from ${EXCLUDES_FILE} --compression zlib,6
 
@@ -164,7 +164,7 @@ if [ $OPERATION_STATUS != 0 ]; then
 	OPERATION_STATUS=1
 fi
 
-printf "\n** Backing up pihole with borg to repo ${BORG_EXTDRIVE_REPO}...\n"
+printf "\n** Backing up pihole with borg to repo ${BORG_EXTDRIVE_REPO}..."
 borg create ${BORG_EXTDRIVE_REPO}::${PIHOLE_BACKUP_NAME} ${PIHOLE_BACKUP_DIR} --stats --compression zlib,6
 
 # Define and store the backup's exit status
@@ -175,7 +175,7 @@ if [ $OPERATION_STATUS != 0 ]; then
 	OPERATION_STATUS=1
 fi
 
-printf "\n** Backing up OpenWrt with borg to repo ${BORG_EXTDRIVE_REPO}...\n"
+printf "\n** Backing up OpenWrt with borg to repo ${BORG_EXTDRIVE_REPO}..."
 borg create ${BORG_EXTDRIVE_REPO}::${ROUTER_BACKUP_NAME} ${ROUTER_BACKUP_DIR} --stats --compression zlib,6
 
 # Define and store the backup's exit status
@@ -187,21 +187,21 @@ if [ $OPERATION_STATUS != 0 ]; then
 fi
 
 # Cleanup Pihole extraction
-printf "\n** Running rm -rf pi* \n"
+printf "\n** Running rm -rf pi* "
 rm -rf pi*
 
 # Cleanup Router extraction
-printf "\n** Running rm -rf openwrt* \n"
+printf "\n** Running rm -rf openwrt* "
 rm -rf openwrt*
 
 # Cleanup .borgenv
-printf "\n** Running rm -f .borgenv \n"
+printf "\n** Running rm -f .borgenv "
 rm -f .borgenv
 
 # Only continue if backup was actually successful
 if [ $OPERATION_STATUS == 0 ]; then
 	# Clean up old backups: keep last daily, last weekly and last monthly
-	printf "\n** Pruning old backups from repo ${BORG_EXTDRIVE_REPO}...\n"
+	printf "\n** Pruning old backups from repo ${BORG_EXTDRIVE_REPO}..."
 	for p in ${ALL_PREFIXES[@]}; do
 		borg prune -v -P ${p} --list --keep-daily=1 --keep-weekly=1 --keep-monthly=1 ${BORG_EXTDRIVE_REPO}
 	done
@@ -211,7 +211,7 @@ if [ $OPERATION_STATUS == 0 ]; then
 	source $ENV_FILE
 	set +o allexport
 
-	printf "\n** Pruning old backups from repo ${BORG_REPO}...\n"
+	printf "\n** Pruning old backups from repo ${BORG_REPO}..."
 	for p in ${ALL_PREFIXES[@]}; do
 		borg prune -v -P ${p} --list --keep-daily=1 --keep-weekly=1 --keep-monthly=1 ${BORG_REPO}
 	done
@@ -230,7 +230,7 @@ fi
 # Sync to AWS if the backup size if lower than the threshold
 if [ $OPERATION_STATUS == 0 ]; then
 	# Sync borg repo to s3
-	printf "\n** Syncing to s3 bucket ${BORG_S3_BACKUP_BUCKET}...\n"
+	printf "\n** Syncing to s3 bucket ${BORG_S3_BACKUP_BUCKET}..."
 	borg with-lock ${BORG_REPO} ${SYNC_COMMAND}
 
 	# We do care about s3 sync succeeding though
@@ -259,11 +259,11 @@ else
 fi
 
 # Stopping docker containers to ensure uncorrupted files
-printf "\n\n** Starting docker containers...\n"
+printf "\n\n** Starting docker containers..."
 docker start $(docker ps -a -q)
 
 # Send Pushover notification and exit appropriately
-printf "\n** Sending notification to pushover...\n"
+printf "\n** Sending notification to pushover..."
 if [ $OPERATION_STATUS == 0 ]; then
 	curl -s "${PUSHOVER_URL}" -F "token=${PUSHOVER_TOKEN}" -F "user=${PUSHOVER_USER_TOKEN}" -F "title=${STATUS_MESSAGE}" -F "message=${MESSAGE}" -F "priority=0" > /dev/null
 else
@@ -271,5 +271,5 @@ else
 fi
 
 # Same as above, but on stdout
-printf "\n** ${STATUS_MESSAGE}\n"
+printf "\n** ${STATUS_MESSAGE}"
 exit ${OPERATION_STATUS}
