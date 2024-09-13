@@ -64,6 +64,10 @@ if [[ ! "$PUSHOVER_URL" && ! "$PUSHOVER_TOKEN" && ! "$PUSHOVER_USER_TOKEN" ]]; t
   exit 1
 fi
 
+# Backing up the .env file
+printf "\n** Copying .env file to ${DOCKER_DIR}...\n"
+cp .env ${DOCKER_DIR}/.borgenv
+
 SYNC_COMMAND="aws s3 sync ${BORG_REPO} s3://${BORG_S3_BACKUP_BUCKET} --profile=${BORG_S3_BACKUP_AWS_PROFILE} --delete"
 
 EXCLUDES_FILE=$(dirname $0)/excludes.txt
@@ -189,6 +193,10 @@ rm -rf pi*
 # Cleanup Router extraction
 printf "\n** Running rm -rf openwrt* \n"
 rm -rf openwrt*
+
+# Cleanup .borgenv
+printf "\n** Running rm -f .borgenv \n"
+rm -f .borgenv
 
 # Only continue if backup was actually successful
 if [ $OPERATION_STATUS == 0 ]; then
