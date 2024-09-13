@@ -14,12 +14,14 @@ set +o allexport
 DOCKER_BACKUP_PREFIX=docker-backup
 ROUTER_BACKUP_PREFIX=router-backup
 PIHOLE_BACKUP_PREFIX=pihole-backup
-ALL_PREFIXES=($DOCKER_BACKUP_PREFIX $ROUTER_BACKUP_PREFIX $PIHOLE_BACKUP_PREFIX)
+ETC_BACKUP_PREFIX=etc-backup
+ALL_PREFIXES=($DOCKER_BACKUP_PREFIX $ROUTER_BACKUP_PREFIX $PIHOLE_BACKUP_PREFIX $ETC_BACKUP_PREFIX)
 CURRENT_TIME=$(date +%Y-%m-%dT%H.%M)
 
 DOCKER_BACKUP_NAME=${DOCKER_BACKUP_PREFIX}-${CURRENT_TIME}
 ROUTER_BACKUP_NAME=${ROUTER_BACKUP_PREFIX}-${CURRENT_TIME}
 PIHOLE_BACKUP_NAME=${PIHOLE_BACKUP_PREFIX}-${CURRENT_TIME}
+ETC_BACKUP_NAME=${ETC_BACKUP_PREFIX}-${CURRENT_TIME}
 
 printf "** Starting backup ${DOCKER_BACKUP_NAME} ..."
 
@@ -151,6 +153,18 @@ if [ $OPERATION_STATUS != 0 ]; then
 	OPERATION_STATUS=1
 fi
 
+# /etc borg backup
+printf "\n** Backing up /etc with borg to repo ${BORG_REPO}..."
+
+# Create borg backup
+borg create ${BORG_REPO}::${ETC_BACKUP_NAME} /etc --stats --compression zlib,6
+OPERATION_STATUS=$?
+if [ $OPERATION_STATUS != 0 ]; then
+	printf "\n** ERROR backing up /etc to ${BORG_REPO}"
+	MESSAGE="Error backing up /etc to ${BORG_REPO}"
+	OPERATION_STATUS=1
+fi
+
 # External Drive borg backup
 printf "\n** Backing up ${DOCKER_DIR} with borg to repo ${BORG_EXTDRIVE_REPO}..."
 export BORG_PASSPHRASE=$BORG_EXTDRIVE_PASSPHRASE
@@ -164,14 +178,14 @@ if [ $OPERATION_STATUS != 0 ]; then
 	OPERATION_STATUS=1
 fi
 
-printf "\n** Backing up pihole with borg to repo ${BORG_EXTDRIVE_REPO}..."
+printf "\n** Backing up Pi-hole with borg to repo ${BORG_EXTDRIVE_REPO}..."
 borg create ${BORG_EXTDRIVE_REPO}::${PIHOLE_BACKUP_NAME} ${PIHOLE_BACKUP_DIR} --stats --compression zlib,6
 
 # Define and store the backup's exit status
 OPERATION_STATUS=$?
 if [ $OPERATION_STATUS != 0 ]; then
-	printf "\n** ERROR backing up pihole to ${BORG_EXTDRIVE_REPO}"
-	MESSAGE="Error backing up pihole to ${BORG_EXTDRIVE_REPO}"
+	printf "\n** ERROR backing up Pi-hole to ${BORG_EXTDRIVE_REPO}"
+	MESSAGE="Error backing up Pi-hole to ${BORG_EXTDRIVE_REPO}"
 	OPERATION_STATUS=1
 fi
 
@@ -186,6 +200,17 @@ if [ $OPERATION_STATUS != 0 ]; then
 	OPERATION_STATUS=1
 fi
 
+printf "\n** Backing up /etc with borg to repo ${BORG_EXTDRIVE_REPO}..."
+borg create ${BORG_EXTDRIVE_REPO}::${ETC_BACKUP_NAME} /etc --stats --compression zlib,6
+
+# Define and store the backup's exit status
+OPERATION_STATUS=$?
+if [ $OPERATION_STATUS != 0 ]; then
+	printf "\n** ERROR backing up /etc to ${BORG_EXTDRIVE_REPO}"
+	MESSAGE="Error backing up /etc to ${BORG_EXTDRIVE_REPO}"
+	OPERATION_STATUS=1
+fi
+
 # Cleanup Pihole extraction
 printf "\n** Running rm -rf pi* "
 rm -rf pi*
@@ -196,7 +221,7 @@ rm -rf openwrt*
 
 # Cleanup .borgenv
 printf "\n** Running rm -f .borgenv "
-rm -f .borgenv
+rm -f ${DOCKER_DIR}/.borgenv
 
 # Only continue if backup was actually successful
 if [ $OPERATION_STATUS == 0 ]; then
