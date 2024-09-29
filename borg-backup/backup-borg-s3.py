@@ -16,7 +16,7 @@ ALL_PREFIXES = (DOCKER_BACKUP_PREFIX,
 CURRENT_TIME = datetime.now().strftime("%Y-%m-%dT%H.%M")
 PIHOLE_BACKUP_DIR="pi-hole-backup"
 ROUTER_BACKUP_DIR="openwrt-backup"
-ROUTER_TAR_NAME="openwrt.tgz"
+ROUTER_TAR_NAME="openwrt.tar.gz"
 DEBUG=False
 
 ENV_VARS = (
@@ -40,18 +40,16 @@ def borg_create(borg_repo: str,
            dry_run = False):
    """Creates a borg archive"""
    print(f"Backing up {backup_dir} with borg to {borg_repo}::{backup_name}")
-   result = subprocess.run(args=[
-      "borg",
-      "create",
-      "--dry-run" if dry_run else "",
-      f"{borg_repo}::{backup_name}",
-      backup_dir,
-      "--stats" if not dry_run else "-v",
-      "--exclude-from",
-      f"{excludes_file}",
-      "--compression",
-      "zlib,6"
-   ], check=not dry_run)
+   cmd = [
+      "borg create " +
+      ("--dry-run " if dry_run else "") +
+      f"{borg_repo}::{backup_name} " +
+      f"{backup_dir} " +
+      ("--stats " if not dry_run else "-v ") +
+      f"--exclude-from {excludes_file} " +
+      "--compression zlib,6"
+   ]
+   result = subprocess.run(cmd, check=not dry_run, shell=True)
    print(result)
    return result
 
@@ -60,14 +58,14 @@ def ssh(host: str, command: str):
    print(f"Initiating ssh command: {host} {command}")
    private_key_path = os.environ.get("SSH_PRIVATE_KEY_PATH")
 
-   return subprocess.run(["ssh", f"-i {private_key_path}", host, command], check=not DEBUG)
+   return subprocess.run([f"ssh -i {private_key_path} {host} {command}"], check=not DEBUG, shell=True)
 
 def scp(host: str, remote_path: str, local_path: str):
    """Runs a scp command"""
    private_key_path = os.environ.get("SSH_PRIVATE_KEY_PATH")
    print(f"Initiating scp command: {host}:{remote_path} {local_path}")
 
-   return subprocess.run(["scp", f"-i {private_key_path}", f"{host}:{remote_path}", local_path], check=not DEBUG)
+   return subprocess.run([f"scp -i {private_key_path} {host}:{remote_path} {local_path}"], check=not DEBUG, shell=True)
 
 def get_router_backup():
    """Retrieves /etc config files from router.  Returns 0 when successful"""
@@ -79,7 +77,7 @@ def get_router_backup():
    try:
       result = ssh(user_and_host, f"tar -cvzf {ROUTER_TAR_NAME} /etc")
       result = scp(user_and_host, ROUTER_TAR_NAME, ".")
-      result = ssh(user_and_host, f"rm -f {ROUTER_TAR_NAME}")
+      result = ssh(user_and_host, f"rm -rf {ROUTER_TAR_NAME}")
    except subprocess.CalledProcessError:
       print(result)
       send_notification(title="Error retrieving Openwrt.lan backup", message=result)
@@ -103,15 +101,15 @@ def get_pihole_backup():
    try:
       result = ssh(user_and_host, "pihole -a -t")
       result = scp(user_and_host, "pi-hole*", ".")
-      result = ssh(user_and_host, f"rm -f pi-hole*")
+      result = ssh(user_and_host, f"rm -rf pi-hole*")
    except subprocess.CalledProcessError:
       print(result)
       send_notification(title="Error retrieving Pi-Hole backup", message=result)
       return 1
 
-   os.makdir(PIHOLE_BACKUP_DIR)
+   os.mkdir(PIHOLE_BACKUP_DIR)
 
-   result = subprocess.run(["tar", "xzvf", "pi-hole-raspberrypi-teleporter*", "-C", PIHOLE_BACKUP_DIR])
+   result = subprocess.run([f"tar xzvf pi-hole-raspberrypi-teleporter* -C {PIHOLE_BACKUP_DIR}"], shell=True)
    print(result)
    return result.returncode
 
@@ -159,7 +157,7 @@ def stop_docker():
    """Stops all running docker containers"""
    print("Stopping docker containers")
    docker_ps_process = subprocess.run(["docker","ps","-a","-q"], capture_output=True, text=True)
-   docker_ps_split = filter(lambda container: container is not "", docker_ps_process.stdout.split("\n"))
+   docker_ps_split = filter(lambda container: container != "", docker_ps_process.stdout.split("\n"))
 
    args=[
       "docker",
@@ -175,7 +173,7 @@ def start_docker():
    """Starts all docker containers"""
    print("Starting docker containers")
    docker_ps_process = subprocess.run(["docker","ps","-a","-q"], capture_output=True, text=True)
-   docker_ps_split = filter(lambda container: container is not "", docker_ps_process.stdout.split("\n"))
+   docker_ps_split = filter(lambda container: container != "", docker_ps_process.stdout.split("\n"))
 
    args=[
       "docker",
@@ -194,17 +192,22 @@ def send_notification(title: str, message: str, priority = 0):
    pushover_token = os.environ.get("PUSHOVER_TOKEN")
    pushover_user_token = os.environ.get("PUSHOVER_USER_TOKEN")
 
-   result = subprocess.run([
-      "curl",
-      "-s",
-      pushover_url,
-      f"-F \"token={pushover_token}\"",
-      f"-F \"user={pushover_user_token}\"",
-      f"-F \"title={title}\"",
-      f"-F \"message={message}\"",
-      f"-F \"priority={priority}\"",
-   ])
+   cmd = [f"curl -s {pushover_url} " +
+          f"-F \"token={pushover_token}\" " +
+          f"-F \"user={pushover_user_token}\" " +
+          f"-F \"title={title}\" " +
+          f"-F \"message={message}\" " +
+          f"-F \"priority={priority}\""]
+   result = subprocess.run(cmd, shell=True)
    print(result)
+
+def prune_repo(borg_repo: str):
+   """Prune old archives from borg repo"""
+   print(f"Pruning old backups from repo {borg_repo}")
+   for prefix in ALL_PREFIXES:
+      subprocess.run([
+         f"borg prune -v -P {prefix} --list --keep-daily=1 --keep-weekly=1 --keep-monthly=1 {borg_repo}"
+      ], shell=True)
 
 def backup_to_aws(borg_repo: str):
    """Syncs borg repo to AWS"""
@@ -214,17 +217,9 @@ def backup_to_aws(borg_repo: str):
    print(f"Syncing to s3 bucket {s3_bucket}")
    try:
       result = subprocess.run([
-         "borg",
-         "with-lock",
-         borg_repo,
-         "aws",
-         "s3",
-         "sync",
-         borg_repo,
-         f"s3://{s3_bucket}",
-         f"--profile={s3_profile}",
-         "--delete"
-      ])
+         f"borg with-lock {borg_repo} " +
+         f"aws s3 sync {borg_repo} s3://{s3_bucket} --profile={s3_profile} --delete"
+      ], shell=True)
       print(result)
    except subprocess.CalledProcessError:
       send_notification(title="Error syncing with AWS", message=result)
@@ -254,14 +249,17 @@ def main():
                   create_router_archive = create_router_archive,
                   create_pihole_archive = create_pihole_archive)
    
-   backup_to_aws(borg_repo)
+   prune_repo(borg_repo = borg_repo)
+   # backup_to_aws(borg_repo)
    
    # Change passphrase for next repo
    os.environ['BORG_PASSPHRASE'] = os.environ.get("BORG_EXTDRIVE_PASSPHRASE")
 
-   backup_to_repo(borg_repo = os.environ.get("BORG_EXTDRIVE_REPO"),
-                  create_router_archive = create_router_archive,
-                  create_pihole_archive = create_pihole_archive)
+   borg_ext_repo = os.environ.get("BORG_EXTDRIVE_REPO")
+   # backup_to_repo(borg_repo = borg_ext_repo,
+   #                create_router_archive = create_router_archive,
+   #                create_pihole_archive = create_pihole_archive)
+   prune_repo(borg_repo = borg_ext_repo)
 
    start_docker()
 
