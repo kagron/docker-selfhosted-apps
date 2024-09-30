@@ -78,9 +78,9 @@ def get_router_backup():
       result = ssh(user_and_host, f"tar -cvzf {ROUTER_TAR_NAME} /etc")
       result = scp(user_and_host, ROUTER_TAR_NAME, ".")
       result = ssh(user_and_host, f"rm -rf {ROUTER_TAR_NAME}")
-   except subprocess.CalledProcessError:
+   except subprocess.CalledProcessError as error:
       print(result)
-      send_notification(title="Error retrieving Openwrt.lan backup", message=result)
+      send_notification(title="Error retrieving Openwrt.lan backup", message=error)
       return 1;
 
    os.mkdir(ROUTER_BACKUP_DIR)
@@ -102,9 +102,9 @@ def get_pihole_backup():
       result = ssh(user_and_host, "pihole -a -t")
       result = scp(user_and_host, "pi-hole*", ".")
       result = ssh(user_and_host, f"rm -rf pi-hole*")
-   except subprocess.CalledProcessError:
+   except subprocess.CalledProcessError as error:
       print(result)
-      send_notification(title="Error retrieving Pi-Hole backup", message=result)
+      send_notification(title="Error retrieving Pi-Hole backup", message=error)
       return 1
 
    os.mkdir(PIHOLE_BACKUP_DIR)
@@ -156,33 +156,16 @@ def backup_to_repo(borg_repo: str, create_router_archive: bool, create_pihole_ar
 def stop_docker():
    """Stops all running docker containers"""
    print("Stopping docker containers")
-   docker_ps_process = subprocess.run(["docker","ps","-a","-q"], capture_output=True, text=True)
-   docker_ps_split = filter(lambda container: container != "", docker_ps_process.stdout.split("\n"))
 
-   args=[
-      "docker",
-      "stop",
-      *docker_ps_split,
-   ]
-   print(args)
    if not DEBUG:
-      result = subprocess.run(args)
+      result = subprocess.run(["docker stop $(docker ps -a -q)"], shell=True)
       print(result)
 
 def start_docker():
    """Starts all docker containers"""
    print("Starting docker containers")
-   docker_ps_process = subprocess.run(["docker","ps","-a","-q"], capture_output=True, text=True)
-   docker_ps_split = filter(lambda container: container != "", docker_ps_process.stdout.split("\n"))
-
-   args=[
-      "docker",
-      "start",
-      *docker_ps_split,
-   ]
-   print(args)
    if not DEBUG:
-      result = subprocess.run(args)
+      result = subprocess.run(["docker start $(docker ps -a -q)"], shell=True)
       print(result)
 
 def send_notification(title: str, message: str, priority = 0):
@@ -204,25 +187,61 @@ def send_notification(title: str, message: str, priority = 0):
 def prune_repo(borg_repo: str):
    """Prune old archives from borg repo"""
    print(f"Pruning old backups from repo {borg_repo}")
+
    for prefix in ALL_PREFIXES:
       subprocess.run([
          f"borg prune -v -P {prefix} --list --keep-daily=1 --keep-weekly=1 --keep-monthly=1 {borg_repo}"
       ], shell=True)
 
+def get_repo_info(borg_repo: str, backup_name = "", json = False):
+   """Runs a borg info command"""
+   print(f"Running borg info {borg_repo}")
+   result = subprocess.run(["borg info " + 
+                   ("--json " if json else "") + 
+                   borg_repo + 
+                   (f"::{backup_name}" if backup_name != "" else "")
+                   ], capture_output=True, text=True, shell=True)
+   print(result)
+   return result.stdout if not result.returncode else ""
+
+def get_backup_size(borg_repo: str, backup_name = ""):
+   """Gets backup size.  Total backup size if no backup_name specified"""
+   print(f"Getting borg backup size for: {borg_repo}" + (f"::{backup_name}" if backup_name != "" else ""))
+   
+   result = subprocess.run([
+      f"borg info --json {borg_repo}" + (f"::{backup_name} " if backup_name != "" else " ") + "| " +
+      "jq .cache.stats.unique_csize | " +
+      "awk \'{ printf \"%d\", $1/1024/1024/1024; }\'"
+   ], capture_output=True, text=True, shell=True)
+
+   print(result)
+   return result.stdout if not result.returncode else ""
+
 def backup_to_aws(borg_repo: str):
-   """Syncs borg repo to AWS"""
+   """Syncs borg repo to AWS.  Returns 0 when successful"""
    s3_bucket = os.environ.get("BORG_S3_BACKUP_BUCKET")
    s3_profile = os.environ.get("BORG_S3_BACKUP_AWS_PROFILE")
+   backup_threshold = os.environ.get("BACKUP_THRESHOLD", 0)
+
+   if(backup_threshold > 0 ):
+      backup_size = get_backup_size(borg_repo)
+      if(backup_size > backup_threshold):
+         msg = f"Backup size {backup_size} GB is larger than threshold {backup_threshold} GB"
+         print(msg)
+         send_notification(title="Backup Threshold", message=msg)
+         return 1;
 
    print(f"Syncing to s3 bucket {s3_bucket}")
    try:
       result = subprocess.run([
          f"borg with-lock {borg_repo} " +
          f"aws s3 sync {borg_repo} s3://{s3_bucket} --profile={s3_profile} --delete"
-      ], shell=True)
+      ], check=True, shell=True)
       print(result)
-   except subprocess.CalledProcessError:
-      send_notification(title="Error syncing with AWS", message=result)
+      return 0
+   except subprocess.CalledProcessError as error:
+      send_notification(title="Error syncing with AWS", message=error)
+      return 1;
 
 def main():
    """Backup all the goodies"""
@@ -239,17 +258,17 @@ def main():
          exit(1)
 
    # Prepare backup directories
-   create_router_archive = not get_router_backup()
-   create_pihole_archive = not get_pihole_backup()
+   # create_router_archive = not get_router_backup()
+   # create_pihole_archive = not get_pihole_backup()
 
-   stop_docker()
+   # stop_docker()
    
    borg_repo = os.environ.get("BORG_REPO")
-   backup_to_repo(borg_repo = borg_repo,
-                  create_router_archive = create_router_archive,
-                  create_pihole_archive = create_pihole_archive)
+   # backup_to_repo(borg_repo = borg_repo,
+                  # create_router_archive = create_router_archive,
+                  # create_pihole_archive = create_pihole_archive)
    
-   prune_repo(borg_repo = borg_repo)
+   # prune_repo(borg_repo = borg_repo)
    # backup_to_aws(borg_repo)
    
    # Change passphrase for next repo
@@ -259,7 +278,7 @@ def main():
    # backup_to_repo(borg_repo = borg_ext_repo,
    #                create_router_archive = create_router_archive,
    #                create_pihole_archive = create_pihole_archive)
-   prune_repo(borg_repo = borg_ext_repo)
+   # prune_repo(borg_repo = borg_ext_repo)
 
    start_docker()
 
