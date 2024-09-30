@@ -243,7 +243,7 @@ if [ $OPERATION_STATUS == 0 ]; then
 
 	# Check and compare backup size with threshold
 	if [[ "$BACKUP_THRESHOLD" && $BACKUP_THRESHOLD != 0 ]]; then
-	  BACKUP_SIZE=$(borg info --json | jq .cache.stats.unique_csize | awk '{ printf "%d", $1/1024/1024/1024; }')
+	  BACKUP_SIZE=$(borg info --json ${BORG_REPO} | jq .cache.stats.unique_csize | awk '{ printf "%d", $1/1024/1024/1024; }')
 	  if [[ $BACKUP_SIZE -gt $BACKUP_THRESHOLD ]]; then
 	     printf "Backup size ${BACKUP_SIZE} GB is larger than the threshold ${BACKUP_THRESHOLD} GB"
 	     OPERATION_STATUS=1
