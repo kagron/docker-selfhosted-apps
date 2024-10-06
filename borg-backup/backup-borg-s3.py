@@ -15,11 +15,11 @@ NUM_LOG_LEVEL = getattr(logging, LOG_LEVEL.upper(), None)
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(message)s', datefmt = '%m/%d/%Y %I:%M:%S %p', filename = LOG_PATH, level = NUM_LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-DOCKER_BACKUP_PREFIX = "docker-backup"
+HOME_BACKUP_PREFIX = "home-backup"
 ROUTER_BACKUP_PREFIX = "router-backup"
 PIHOLE_BACKUP_PREFIX = "pihole-backup"
 ETC_BACKUP_PREFIX = "etc-backup"
-ALL_PREFIXES = (DOCKER_BACKUP_PREFIX, 
+ALL_PREFIXES = (HOME_BACKUP_PREFIX, 
                 ROUTER_BACKUP_PREFIX, 
                 PIHOLE_BACKUP_PREFIX, 
                 ETC_BACKUP_PREFIX)
@@ -30,7 +30,7 @@ ROUTER_TAR_NAME="openwrt.tar.gz"
 DEBUG=False
 
 ENV_VARS = (
-   "DOCKER_DIR",
+   # "DOCKER_DIR",
    "ROUTER_HOST",
    "PIHOLE_HOST",
    "SSH_PRIVATE_KEY_PATH",
@@ -183,8 +183,8 @@ def backup_to_repo(borg_repo: str, create_router_archive: bool, create_pihole_ar
    # Docker
    result = borg_create(
       borg_repo = borg_repo,
-      backup_name = f"{DOCKER_BACKUP_PREFIX}-{CURRENT_TIME}",
-      backup_dir = os.environ.get("DOCKER_DIR"),
+      backup_name = f"{HOME_BACKUP_PREFIX}-{CURRENT_TIME}",
+      backup_dir = "/home",
       excludes_file = excludes,
       dry_run = DEBUG)
 
